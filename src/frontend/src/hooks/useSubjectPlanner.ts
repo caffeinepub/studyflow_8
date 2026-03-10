@@ -14,7 +14,6 @@ export type Topic = {
   text: string;
   completed: boolean;
   createdAt: bigint;
-  dueDate: [] | [string];
 };
 
 export type Subject = {
@@ -40,22 +39,35 @@ export function useSubjectPlanner() {
     addSubjectMutation(trimmed);
   };
 
-  const deleteSubject = (id: string) => {
-    deleteSubjectMutation(id);
+  const deleteSubject = (
+    id: string,
+    onSuccess?: () => void,
+    onError?: () => void,
+  ) => {
+    deleteSubjectMutation(id, { onSuccess, onError });
   };
 
-  const addTopics = (subjectId: string, texts: string[], dueDate?: string) => {
+  const addTopics = (
+    subjectId: string,
+    texts: string[],
+    onSuccess?: () => void,
+    onError?: () => void,
+  ) => {
     const filtered = texts.map((t) => t.trim()).filter(Boolean);
     if (filtered.length === 0) return;
-    addTopicsMutation({ subjectId, texts: filtered, dueDate });
+    addTopicsMutation({ subjectId, texts: filtered }, { onSuccess, onError });
   };
 
   const toggleTopic = (id: string) => {
     toggleTopicMutation(id);
   };
 
-  const deleteTopic = (id: string) => {
-    deleteTopicMutation(id);
+  const deleteTopic = (
+    id: string,
+    onSuccess?: () => void,
+    onError?: () => void,
+  ) => {
+    deleteTopicMutation(id, { onSuccess, onError });
   };
 
   return {

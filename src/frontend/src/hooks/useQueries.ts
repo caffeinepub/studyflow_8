@@ -2,16 +2,26 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActor } from "./useActor";
 import { useInternetIdentity } from "./useInternetIdentity";
 
-// Helper: ensure user is registered before any write operation
+const regCache = new WeakMap<object, Promise<void>>();
+
+function getRegPromise(
+  actor: import("../backend").backendInterface,
+): Promise<void> {
+  if (!regCache.has(actor)) {
+    regCache.set(actor, (actor as any).ensureUser() as Promise<void>);
+  }
+  return regCache.get(actor)!;
+}
+
 async function ensureAndRun<T>(
   actor: import("../backend").backendInterface,
   fn: () => Promise<T>,
 ): Promise<T> {
-  await actor.ensureUser();
+  await getRegPromise(actor);
   return fn();
 }
 
-// ─── Sessions ──────────────────────────────────────────────────────────────
+// Sessions
 
 export function useGetDailySessions() {
   const { actor, isFetching } = useActor();
@@ -57,7 +67,7 @@ export function useSaveDailySession() {
   });
 }
 
-// ─── Todos ─────────────────────────────────────────────────────────────────
+// Todos
 
 export function useGetTodos() {
   const { actor, isFetching } = useActor();
@@ -83,7 +93,18 @@ export function useAddTodo() {
       if (!actor) throw new Error("No actor");
       return ensureAndRun(actor, () => actor.addTodo(text));
     },
-    onSuccess: () => {
+    onSuccess: (newTodo) => {
+      queryClient.setQueryData(
+        ["todos", principalKey],
+        (
+          old: Array<{
+            id: bigint;
+            text: string;
+            completed: boolean;
+            createdAt: bigint;
+          }> = [],
+        ) => [...old, { ...newTodo, id: newTodo.id }],
+      );
       queryClient.invalidateQueries({ queryKey: ["todos", principalKey] });
     },
   });
@@ -155,7 +176,7 @@ export function useDeleteTodo() {
   });
 }
 
-// ─── Subjects ──────────────────────────────────────────────────────────────
+// Subjects
 
 export function useGetSubjects() {
   const { actor, isFetching } = useActor();
@@ -270,22 +291,14 @@ export function useAddTopics() {
     mutationFn: async ({
       subjectId,
       texts,
-      dueDate,
     }: {
       subjectId: string;
       texts: string[];
-      dueDate?: string;
     }) => {
       if (!actor) throw new Error("No actor");
-      const topicInputs = texts.map((text) => ({
-        text,
-        dueDate: dueDate ? ([dueDate] as [string]) : ([] as []),
-      }));
-      return ensureAndRun(actor, () =>
-        (actor as any).addTopics(subjectId, topicInputs),
-      );
+      return ensureAndRun(actor, () => actor.addTopics(subjectId, texts));
     },
-    onMutate: async ({ subjectId, texts, dueDate }) => {
+    onMutate: async ({ subjectId, texts }) => {
       await queryClient.cancelQueries({ queryKey: ["topics", principalKey] });
       const prev = queryClient.getQueryData(["topics", principalKey]);
       const now = Date.now();
@@ -295,7 +308,6 @@ export function useAddTopics() {
         text,
         completed: false,
         createdAt: BigInt(now + i) * BigInt(1_000_000),
-        dueDate: dueDate ? ([dueDate] as [string]) : ([] as []),
       }));
       queryClient.setQueryData(
         ["topics", principalKey],
@@ -306,7 +318,6 @@ export function useAddTopics() {
             text: string;
             completed: boolean;
             createdAt: bigint;
-            dueDate: [] | [string];
           }> = [],
         ) => [...old, ...optimisticTopics],
       );

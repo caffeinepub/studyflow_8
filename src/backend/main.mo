@@ -36,23 +36,12 @@ actor {
     createdAt : Int;
   };
 
-  // Storage type — unchanged to preserve stable variable compatibility
   type Topic = {
     id : Text;
     subjectId : Text;
     text : Text;
     completed : Bool;
     createdAt : Int;
-  };
-
-  // Return type — includes optional due date (not stored in stable Topic)
-  type TopicView = {
-    id : Text;
-    subjectId : Text;
-    text : Text;
-    completed : Bool;
-    createdAt : Int;
-    dueDate : ?Text;
   };
 
   module Topic {
@@ -99,9 +88,22 @@ actor {
   let userData = Map.empty<Principal, UserData>();
   let userProfiles = Map.empty<Principal, UserProfile>();
 
-  // Separate stable map for topic due dates: principal -> (topicId -> dueDate)
-  // New variable — does not conflict with existing stable data
+  // Retained for upgrade compatibility — do not remove
   let userTopicDueDates = Map.empty<Principal, Map.Map<Text, Text>>();
+  ignore userTopicDueDates;
+
+  func registerCallerIfNeeded(caller : Principal) {
+    if (caller.isAnonymous()) { return };
+    switch (accessControlState.userRoles.get(caller)) {
+      case (null) {
+        accessControlState.userRoles.add(caller, #user);
+      };
+      case (?#guest) {
+        accessControlState.userRoles.add(caller, #user);
+      };
+      case (_) {};
+    };
+  };
 
   func getUserState(caller : Principal) : UserData {
     switch (userData.get(caller)) {
@@ -126,33 +128,14 @@ actor {
     userData.add(caller, state);
   };
 
-  func getDueDatesMap(caller : Principal) : Map.Map<Text, Text> {
-    switch (userTopicDueDates.get(caller)) {
-      case (null) {
-        let m = Map.empty<Text, Text>();
-        userTopicDueDates.add(caller, m);
-        m;
-      };
-      case (?m) { m };
+  public shared ({ caller }) func ensureUser() : async () {
+    if (caller.isAnonymous()) {
+      Runtime.trap("Anonymous users cannot be registered");
     };
+    registerCallerIfNeeded(caller);
   };
 
-  func topicToView(topic : Topic, dueDates : Map.Map<Text, Text>) : TopicView {
-    {
-      id = topic.id;
-      subjectId = topic.subjectId;
-      text = topic.text;
-      completed = topic.completed;
-      createdAt = topic.createdAt;
-      dueDate = dueDates.get(topic.id);
-    };
-  };
-
-  // User Profile Functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can access profiles");
-    };
     userProfiles.get(caller);
   };
 
@@ -164,40 +147,29 @@ actor {
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
-    };
+    registerCallerIfNeeded(caller);
     userProfiles.add(caller, profile);
   };
 
-  // Daily Session Functions
   public shared ({ caller }) func saveDailySession(date : Text, studySeconds : Nat, breakSeconds : Nat, stopCount : Nat) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save study sessions");
-    };
+    registerCallerIfNeeded(caller);
     let userState = getUserState(caller);
     let session : StudySession = { date; studySeconds; breakSeconds; stopCount };
     userState.dailySessions.add(date, session);
   };
 
   public query ({ caller }) func getDailySessions() : async [StudySession] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can access study sessions");
-    };
     let userState = getUserState(caller);
     userState.dailySessions.values().toArray();
   };
 
-  // Todo Functions
   public shared ({ caller }) func addTodo(text : Text) : async {
     id : Nat;
     text : Text;
     completed : Bool;
     createdAt : Int;
   } {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can add todos");
-    };
+    registerCallerIfNeeded(caller);
     let userState = getUserState(caller);
     let todo : TodoItem = { id = userState.nextTodoId; text; completed = false; createdAt = 0 };
     userState.todos.add(userState.nextTodoId, todo);
@@ -206,9 +178,7 @@ actor {
   };
 
   public shared ({ caller }) func toggleTodo(id : Nat) : async TodoItem {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can toggle todos");
-    };
+    registerCallerIfNeeded(caller);
     let userState = getUserState(caller);
     switch (userState.todos.get(id)) {
       case (null) { Runtime.trap("Todo not found") };
@@ -221,9 +191,7 @@ actor {
   };
 
   public shared ({ caller }) func deleteTodo(id : Nat) : async Bool {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can delete todos");
-    };
+    registerCallerIfNeeded(caller);
     let userState = getUserState(caller);
     if (userState.todos.containsKey(id)) {
       userState.todos.remove(id);
@@ -232,18 +200,12 @@ actor {
   };
 
   public query ({ caller }) func getTodos() : async [TodoItem] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can access todos");
-    };
     let userState = getUserState(caller);
     userState.todos.values().toArray().sort(TodoItem.compareByCreatedAt);
   };
 
-  // Subject Planner Functions
   public shared ({ caller }) func addSubject(name : Text) : async Subject {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can add subjects");
-    };
+    registerCallerIfNeeded(caller);
     let userState = getUserState(caller);
     let subjectId = userState.nextSubjectId.toText();
     let subject : Subject = { id = subjectId; name; createdAt = 0 };
@@ -253,104 +215,64 @@ actor {
   };
 
   public shared ({ caller }) func deleteSubject(id : Text) : async Bool {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can delete subjects");
-    };
+    registerCallerIfNeeded(caller);
     let userState = getUserState(caller);
     if (userState.subjects.containsKey(id)) {
       userState.subjects.remove(id);
-      // Delete all topics and their due dates for this subject
-      let dueDates = getDueDatesMap(caller);
       let topicsToRemove = userState.topics.filter(func(_topicId, topic) { topic.subjectId == id });
       for (entry in topicsToRemove.entries()) {
         userState.topics.remove(entry.0);
-        dueDates.remove(entry.0);
       };
       true;
     } else { false };
   };
 
-  public shared ({ caller }) func addTopics(subjectId : Text, topicInputs : [{ text : Text; dueDate : ?Text }]) : async [TopicView] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can add topics");
-    };
+  public shared ({ caller }) func addTopics(subjectId : Text, texts : [Text]) : async [Topic] {
+    registerCallerIfNeeded(caller);
     let userState = getUserState(caller);
-    let dueDates = getDueDatesMap(caller);
-    let newTopics = topicInputs.map(
-      func(input) {
-        let topicId = userState.nextTopicId.toText();
-        let topic : Topic = { id = topicId; subjectId; text = input.text; completed = false; createdAt = 0 };
+    var nextId = userState.nextTopicId;
+    let newTopics = texts.map(
+      func(text) {
+        let topicId = nextId.toText();
+        let topic : Topic = { id = topicId; subjectId; text; completed = false; createdAt = 0 };
         userState.topics.add(topicId, topic);
-        switch (input.dueDate) {
-          case (null) {};
-          case (?date) { dueDates.add(topicId, date) };
-        };
-        topicToView(topic, dueDates);
+        nextId += 1;
+        topic;
       }
     );
-    updateUserState(caller, { userState with nextTopicId = userState.nextTopicId + topicInputs.size() });
+    updateUserState(caller, { userState with nextTopicId = nextId });
     newTopics;
   };
 
-  public shared ({ caller }) func toggleTopic(id : Text) : async TopicView {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can toggle topics");
-    };
+  public shared ({ caller }) func toggleTopic(id : Text) : async Topic {
+    registerCallerIfNeeded(caller);
     let userState = getUserState(caller);
     switch (userState.topics.get(id)) {
       case (null) { Runtime.trap("Topic not found") };
       case (?topic) {
         let updatedTopic : Topic = { topic with completed = not topic.completed };
         userState.topics.add(id, updatedTopic);
-        topicToView(updatedTopic, getDueDatesMap(caller));
+        updatedTopic;
       };
     };
   };
 
   public shared ({ caller }) func deleteTopic(id : Text) : async Bool {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can delete topics");
-    };
+    registerCallerIfNeeded(caller);
     let userState = getUserState(caller);
     if (userState.topics.containsKey(id)) {
       userState.topics.remove(id);
-      getDueDatesMap(caller).remove(id);
       true;
     } else { false };
   };
 
   public query ({ caller }) func getSubjects() : async [Subject] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can access subjects");
-    };
     let userState = getUserState(caller);
     userState.subjects.values().toArray().sort(Subject.compareByCreatedAt);
   };
 
-  public query ({ caller }) func getTopics() : async [TopicView] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can access topics");
-    };
+  public query ({ caller }) func getTopics() : async [Topic] {
     let userState = getUserState(caller);
-    let dueDates = switch (userTopicDueDates.get(caller)) {
-      case (null) { Map.empty<Text, Text>() };
-      case (?m) { m };
-    };
-    userState.topics.values().toArray().sort(Topic.compareByCreatedAt).map(
-      func(t) { topicToView(t, dueDates) }
-    );
-  };
-
-  public shared ({ caller }) func ensureUser() : async () {
-    if (caller.isAnonymous()) {
-      Runtime.trap("Anonymous users cannot be registered");
-    };
-    let currentRole = AccessControl.getUserRole(accessControlState, caller);
-    switch (currentRole) {
-      case (#guest) {
-        AccessControl.assignRole(accessControlState, caller, caller, #user);
-      };
-      case (_) {};
-    };
+    userState.topics.values().toArray().sort(Topic.compareByCreatedAt);
   };
 };
