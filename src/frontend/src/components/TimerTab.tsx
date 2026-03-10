@@ -20,9 +20,31 @@ interface SessionStats {
   stopCount: number;
 }
 
+const BREAK_ALARM_THRESHOLD = 900; // 15 minutes in seconds
+
+function playAlarmBeep() {
+  try {
+    const ctx = new AudioContext();
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+    gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.5);
+    oscillator.onended = () => ctx.close();
+  } catch {
+    // AudioContext unavailable — silently ignore
+  }
+}
+
 export default function TimerTab() {
   const [mode, setMode] = useState<TimerMode>("idle");
-  const [elapsed, setElapsed] = useState(0); // seconds for current segment
+  // elapsed is only used to trigger re-renders; wall-clock is the source of truth
+  const [, setElapsed] = useState(0);
   const [stats, setStats] = useState<SessionStats>({
     studySeconds: 0,
     breakSeconds: 0,
@@ -30,6 +52,14 @@ export default function TimerTab() {
   });
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Wall-clock reference: when current segment started
+  const startTimeRef = useRef<number>(0);
+  // How many seconds were accumulated in previous segments for display
+  const baseStudyRef = useRef<number>(0);
+  const baseBreakRef = useRef<number>(0);
+  // Track if alarm has already fired for the current break session
+  const alarmFiredRef = useRef<boolean>(false);
+
   const todayDate = new Date().toISOString().split("T")[0];
 
   const { data: sessions } = useGetDailySessions();
@@ -48,14 +78,11 @@ export default function TimerTab() {
     }
   }, [sessions, todayDate]);
 
-  const tick = useCallback(() => {
-    setElapsed((prev) => prev + 1);
-  }, []);
-
-  const startInterval = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(tick, 1000);
-  }, [tick]);
+  // Returns the wall-clock elapsed seconds for the CURRENT active segment only
+  const getWallSegmentElapsed = useCallback((): number => {
+    if (mode === "idle") return 0;
+    return Math.floor((Date.now() - startTimeRef.current) / 1000);
+  }, [mode]);
 
   const stopInterval = useCallback(() => {
     if (intervalRef.current) {
@@ -64,58 +91,100 @@ export default function TimerTab() {
     }
   }, []);
 
-  // Flush elapsed seconds into stats
-  const flushElapsed = useCallback(
-    (currentMode: TimerMode, currentElapsed: number) => {
-      if (currentMode === "studying") {
-        setStats((prev) => ({
-          ...prev,
-          studySeconds: prev.studySeconds + currentElapsed,
-        }));
-      } else if (currentMode === "break") {
-        setStats((prev) => ({
-          ...prev,
-          breakSeconds: prev.breakSeconds + currentElapsed,
-        }));
-      }
+  const startInterval = useCallback(
+    (isBreak = false) => {
+      stopInterval();
+      intervalRef.current = setInterval(() => {
+        setElapsed((e) => e + 1);
+        // Check break alarm only when in break mode
+        if (isBreak && !alarmFiredRef.current) {
+          const elapsed = Math.floor(
+            (Date.now() - startTimeRef.current) / 1000,
+          );
+          if (elapsed >= BREAK_ALARM_THRESHOLD) {
+            alarmFiredRef.current = true;
+            playAlarmBeep();
+            toast.warning(
+              "⏰ Break time! You've been on break for 15 minutes. Time to get back to studying!",
+              { duration: Number.POSITIVE_INFINITY, dismissible: true },
+            );
+          }
+        }
+      }, 1000);
     },
-    [],
+    [stopInterval],
   );
 
   const handleStartStudying = () => {
+    // Reset base accumulators for display
+    baseStudyRef.current = stats.studySeconds;
+    baseBreakRef.current = stats.breakSeconds;
+    startTimeRef.current = Date.now();
+    alarmFiredRef.current = false;
     setMode("studying");
     setElapsed(0);
-    startInterval();
+    startInterval(false);
   };
 
   const handleTakeBreak = () => {
-    flushElapsed(mode, elapsed);
+    // Flush current study segment into stats
+    const studyElapsed = getWallSegmentElapsed();
+    setStats((prev) => {
+      const updated = {
+        ...prev,
+        studySeconds: prev.studySeconds + studyElapsed,
+      };
+      baseStudyRef.current = updated.studySeconds;
+      baseBreakRef.current = updated.breakSeconds;
+      return updated;
+    });
+    // Start break segment
+    startTimeRef.current = Date.now();
+    alarmFiredRef.current = false;
     setMode("break");
     setElapsed(0);
-    startInterval();
+    startInterval(true);
   };
 
   const handleResumeStudying = () => {
-    flushElapsed(mode, elapsed);
+    // Flush current break segment into stats
+    const breakElapsed = getWallSegmentElapsed();
+    setStats((prev) => {
+      const updated = {
+        ...prev,
+        breakSeconds: prev.breakSeconds + breakElapsed,
+      };
+      baseStudyRef.current = updated.studySeconds;
+      baseBreakRef.current = updated.breakSeconds;
+      return updated;
+    });
+    // Start study segment — reset alarm ref
+    startTimeRef.current = Date.now();
+    alarmFiredRef.current = false;
     setMode("studying");
     setElapsed(0);
-    startInterval();
+    startInterval(false);
   };
 
   const handleStop = () => {
     stopInterval();
-    // Flush current segment
+    alarmFiredRef.current = false;
+    const segmentElapsed = Math.floor(
+      (Date.now() - startTimeRef.current) / 1000,
+    );
+
     const finalStats = { ...stats };
     if (mode === "studying") {
-      finalStats.studySeconds += elapsed;
+      finalStats.studySeconds += segmentElapsed;
     } else if (mode === "break") {
-      finalStats.breakSeconds += elapsed;
+      finalStats.breakSeconds += segmentElapsed;
     }
     finalStats.stopCount += 1;
 
     setStats(finalStats);
     setMode("idle");
     setElapsed(0);
+    startTimeRef.current = 0;
 
     // Save to backend
     saveSession(
@@ -134,8 +203,12 @@ export default function TimerTab() {
 
   const handleReset = () => {
     stopInterval();
+    alarmFiredRef.current = false;
     setMode("idle");
     setElapsed(0);
+    startTimeRef.current = 0;
+    baseStudyRef.current = 0;
+    baseBreakRef.current = 0;
     setStats({ studySeconds: 0, breakSeconds: 0, stopCount: 0 });
   };
 
@@ -143,17 +216,28 @@ export default function TimerTab() {
     return () => stopInterval();
   }, [stopInterval]);
 
-  // Current display time
-  const currentElapsed = elapsed;
-  // Total study = accumulated + current if studying
+  // Compute display values from wall clock
+  const segmentElapsed =
+    mode !== "idle"
+      ? Math.floor((Date.now() - startTimeRef.current) / 1000)
+      : 0;
+
   const displayStudy =
-    stats.studySeconds + (mode === "studying" ? currentElapsed : 0);
+    stats.studySeconds + (mode === "studying" ? segmentElapsed : 0);
   const displayBreak =
-    stats.breakSeconds + (mode === "break" ? currentElapsed : 0);
+    stats.breakSeconds + (mode === "break" ? segmentElapsed : 0);
 
   const isStudying = mode === "studying";
   const isOnBreak = mode === "break";
   const isActive = isStudying || isOnBreak;
+
+  // Break warning indicator: orange at 10min, red at 15min
+  const breakElapsedForDisplay = isOnBreak
+    ? Math.floor((Date.now() - startTimeRef.current) / 1000)
+    : 0;
+  const breakWarning = breakElapsedForDisplay >= 600 && isOnBreak;
+  const breakAlarm =
+    breakElapsedForDisplay >= BREAK_ALARM_THRESHOLD && isOnBreak;
 
   return (
     <div className="flex flex-col items-center gap-8 py-6 px-4">
@@ -165,15 +249,39 @@ export default function TimerTab() {
         className="flex items-center gap-2"
       >
         {isStudying && (
-          <span className="flex items-center gap-2 text-sm font-semibold tracking-widest uppercase text-primary">
-            <span className="w-2 h-2 rounded-full bg-primary glow-pulse inline-block" />
+          <span
+            className="flex items-center gap-2 text-sm font-semibold tracking-widest uppercase"
+            style={{ color: "oklch(0.45 0.28 295)" }}
+          >
+            <span
+              className="w-2 h-2 rounded-full glow-pulse inline-block"
+              style={{ background: "oklch(0.55 0.28 295)" }}
+            />
             Studying
           </span>
         )}
         {isOnBreak && (
-          <span className="flex items-center gap-2 text-sm font-semibold tracking-widest uppercase text-secondary-foreground">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 glow-pulse inline-block" />
-            On Break
+          <span
+            className="flex items-center gap-2 text-sm font-semibold tracking-widest uppercase"
+            style={{
+              color: breakAlarm
+                ? "oklch(0.50 0.26 25)"
+                : breakWarning
+                  ? "oklch(0.52 0.22 60)"
+                  : "oklch(0.42 0.22 210)",
+            }}
+          >
+            <span
+              className="w-2 h-2 rounded-full glow-pulse inline-block"
+              style={{
+                background: breakAlarm
+                  ? "oklch(0.6 0.28 25)"
+                  : breakWarning
+                    ? "oklch(0.65 0.22 60)"
+                    : "oklch(0.6 0.24 210)",
+              }}
+            />
+            {breakAlarm ? "⚠️ Break Too Long!" : "On Break"}
           </span>
         )}
         {!isActive && (
@@ -195,48 +303,93 @@ export default function TimerTab() {
         }`}
         style={{
           background: isStudying
-            ? "radial-gradient(circle at 40% 40%, oklch(0.18 0.06 295), oklch(0.12 0.03 285))"
+            ? "radial-gradient(circle at 40% 40%, oklch(0.95 0.04 295), oklch(0.98 0.01 285))"
             : isOnBreak
-              ? "radial-gradient(circle at 40% 40%, oklch(0.18 0.06 210), oklch(0.12 0.03 285))"
-              : "radial-gradient(circle at 40% 40%, oklch(0.16 0.04 285), oklch(0.11 0.02 285))",
+              ? breakAlarm
+                ? "radial-gradient(circle at 40% 40%, oklch(0.95 0.06 25), oklch(0.98 0.01 285))"
+                : "radial-gradient(circle at 40% 40%, oklch(0.94 0.04 210), oklch(0.98 0.01 285))"
+              : "radial-gradient(circle at 40% 40%, oklch(0.97 0.02 285), oklch(1 0 0))",
           border: isStudying
             ? "2px solid oklch(0.65 0.28 295 / 0.5)"
             : isOnBreak
-              ? "2px solid oklch(0.7 0.24 210 / 0.5)"
-              : "2px solid oklch(0.3 0.05 285 / 0.5)",
+              ? breakAlarm
+                ? "2px solid oklch(0.6 0.28 25 / 0.6)"
+                : "2px solid oklch(0.6 0.24 210 / 0.5)"
+              : "2px solid oklch(0.85 0.05 285 / 0.6)",
+          boxShadow:
+            isStudying || isOnBreak
+              ? "0 4px 32px oklch(0.55 0.2 295 / 0.12)"
+              : "0 2px 16px oklch(0.55 0.1 285 / 0.06)",
         }}
       >
-        {/* Decorative ring */}
-        <div
-          className="absolute inset-0 rounded-full"
-          style={{
-            background: isStudying
-              ? "conic-gradient(from 0deg, oklch(0.65 0.28 295 / 0.3), oklch(0.62 0.28 345 / 0.1), oklch(0.65 0.28 295 / 0.3))"
-              : "transparent",
-          }}
-        />
+        {/* Decorative conic ring for studying */}
+        {isStudying && (
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              background:
+                "conic-gradient(from 0deg, oklch(0.65 0.28 295 / 0.12), oklch(0.62 0.28 345 / 0.04), oklch(0.65 0.28 295 / 0.12))",
+            }}
+          />
+        )}
 
         <div className="relative z-10 text-center">
           <div
             className="timer-display font-mono text-5xl md:text-6xl font-bold tracking-wider"
             style={{
               color: isStudying
-                ? "oklch(0.85 0.2 295)"
+                ? "oklch(0.4 0.28 295)"
                 : isOnBreak
-                  ? "oklch(0.8 0.2 210)"
-                  : "oklch(0.7 0.06 285)",
+                  ? breakAlarm
+                    ? "oklch(0.45 0.28 25)"
+                    : "oklch(0.38 0.22 210)"
+                  : "oklch(0.35 0.06 285)",
               textShadow: isStudying
-                ? "0 0 30px oklch(0.65 0.28 295 / 0.5)"
+                ? "0 2px 12px oklch(0.65 0.28 295 / 0.2)"
                 : isOnBreak
-                  ? "0 0 30px oklch(0.7 0.24 210 / 0.5)"
+                  ? "0 2px 12px oklch(0.6 0.24 210 / 0.2)"
                   : "none",
             }}
           >
-            {formatTime(currentElapsed)}
+            {formatTime(segmentElapsed)}
           </div>
-          <div className="text-xs text-muted-foreground mt-1 uppercase tracking-widest">
+          <div
+            className="text-xs mt-1 uppercase tracking-widest font-semibold"
+            style={{ color: "oklch(0.55 0.06 285)" }}
+          >
             {isStudying ? "focus time" : isOnBreak ? "break time" : "stopped"}
           </div>
+          {/* Break limit warning bar */}
+          {isOnBreak && (
+            <div className="mt-2 w-24 mx-auto">
+              <div
+                className="h-1.5 rounded-full overflow-hidden"
+                style={{ background: "oklch(0.9 0.04 285)" }}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-1000"
+                  style={{
+                    width: `${Math.min(100, (breakElapsedForDisplay / BREAK_ALARM_THRESHOLD) * 100)}%`,
+                    background: breakAlarm
+                      ? "oklch(0.6 0.28 25)"
+                      : breakWarning
+                        ? "oklch(0.65 0.22 60)"
+                        : "oklch(0.6 0.24 210)",
+                  }}
+                />
+              </div>
+              <div
+                className="text-[9px] mt-0.5 text-center"
+                style={{
+                  color: breakAlarm
+                    ? "oklch(0.5 0.26 25)"
+                    : "oklch(0.6 0.06 285)",
+                }}
+              >
+                {breakAlarm ? "15 min limit reached" : "15 min limit"}
+              </div>
+            </div>
+          )}
         </div>
       </motion.div>
 
@@ -247,7 +400,7 @@ export default function TimerTab() {
             data-ocid="timer.start_button"
             onClick={handleStartStudying}
             size="lg"
-            className="font-semibold px-8 gap-2"
+            className="font-semibold px-8 gap-2 shadow-md"
             style={{
               background:
                 "linear-gradient(135deg, oklch(0.65 0.28 295), oklch(0.62 0.28 345))",
@@ -266,8 +419,12 @@ export default function TimerTab() {
             onClick={handleTakeBreak}
             size="lg"
             variant="outline"
-            className="font-semibold px-8 gap-2 border-cyan-500/40 hover:border-cyan-400/70"
-            style={{ color: "oklch(0.8 0.2 210)" }}
+            className="font-semibold px-8 gap-2"
+            style={{
+              borderColor: "oklch(0.6 0.24 210 / 0.5)",
+              color: "oklch(0.38 0.22 210)",
+              background: "oklch(0.95 0.03 210)",
+            }}
           >
             <Coffee className="w-5 h-5" />
             Take a Break
@@ -279,7 +436,7 @@ export default function TimerTab() {
             data-ocid="timer.resume_button"
             onClick={handleResumeStudying}
             size="lg"
-            className="font-semibold px-8 gap-2"
+            className="font-semibold px-8 gap-2 shadow-md"
             style={{
               background:
                 "linear-gradient(135deg, oklch(0.65 0.28 295), oklch(0.62 0.28 345))",
@@ -299,8 +456,12 @@ export default function TimerTab() {
             disabled={isSaving}
             size="lg"
             variant="outline"
-            className="font-semibold px-8 gap-2 border-pink-500/40 hover:border-pink-400/70"
-            style={{ color: "oklch(0.75 0.22 345)" }}
+            className="font-semibold px-8 gap-2"
+            style={{
+              borderColor: "oklch(0.58 0.26 345 / 0.5)",
+              color: "oklch(0.45 0.24 345)",
+              background: "oklch(0.97 0.03 345)",
+            }}
           >
             <Square className="w-5 h-5" />
             {isSaving ? "Saving..." : "Stop Session"}
@@ -334,7 +495,7 @@ export default function TimerTab() {
               className="text-xl font-bold font-mono mb-1"
               style={{
                 background:
-                  "linear-gradient(135deg, oklch(0.75 0.2 295), oklch(0.75 0.22 345))",
+                  "linear-gradient(135deg, oklch(0.5 0.28 295), oklch(0.52 0.26 345))",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
@@ -356,7 +517,7 @@ export default function TimerTab() {
               className="text-xl font-bold font-mono mb-1"
               style={{
                 background:
-                  "linear-gradient(135deg, oklch(0.8 0.2 210), oklch(0.75 0.2 180))",
+                  "linear-gradient(135deg, oklch(0.45 0.22 210), oklch(0.48 0.2 180))",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
@@ -378,13 +539,13 @@ export default function TimerTab() {
               className="text-xl font-bold font-mono mb-1"
               style={{
                 background:
-                  "linear-gradient(135deg, oklch(0.75 0.22 345), oklch(0.75 0.2 25))",
+                  "linear-gradient(135deg, oklch(0.52 0.26 345), oklch(0.52 0.24 25))",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
               }}
             >
-              {stats.stopCount + (mode !== "idle" ? 0 : 0)}
+              {stats.stopCount}
             </div>
             <div className="text-xs text-muted-foreground uppercase tracking-wide">
               Sessions

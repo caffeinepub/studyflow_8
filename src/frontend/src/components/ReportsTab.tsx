@@ -108,9 +108,18 @@ interface CustomTooltipProps {
 function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (active && payload && payload.length) {
     return (
-      <div className="glass-card rounded-xl px-4 py-3 text-sm shadow-xl">
-        <p className="text-muted-foreground text-xs mb-1">{label}</p>
-        <p className="font-bold" style={{ color: "oklch(0.75 0.2 295)" }}>
+      <div
+        className="rounded-xl px-4 py-3 text-sm shadow-xl"
+        style={{
+          background: "oklch(1 0 0)",
+          border: "1px solid oklch(0.88 0.05 285 / 0.7)",
+          boxShadow: "0 4px 20px oklch(0.55 0.2 295 / 0.12)",
+        }}
+      >
+        <p className="text-xs mb-1" style={{ color: "oklch(0.5 0.06 285)" }}>
+          {label}
+        </p>
+        <p className="font-bold" style={{ color: "oklch(0.45 0.28 295)" }}>
           {payload[0].value.toFixed(2)}h studied
         </p>
       </div>
@@ -246,11 +255,12 @@ export default function ReportsTab() {
                     background:
                       "linear-gradient(135deg, oklch(0.65 0.28 295), oklch(0.62 0.28 345))",
                     color: "white",
+                    boxShadow: "0 2px 10px oklch(0.55 0.24 295 / 0.3)",
                   }
                 : {
-                    background: "oklch(0.18 0.03 285)",
-                    color: "oklch(0.65 0.1 285)",
-                    border: "1px solid oklch(0.3 0.05 285 / 0.5)",
+                    background: "oklch(0.95 0.02 285)",
+                    color: "oklch(0.45 0.08 285)",
+                    border: "1px solid oklch(0.87 0.04 285 / 0.7)",
                   }
             }
           >
@@ -314,25 +324,25 @@ export default function ReportsTab() {
             >
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="oklch(0.25 0.04 285 / 0.5)"
+                stroke="oklch(0.88 0.04 285 / 0.6)"
                 vertical={false}
               />
               <XAxis
                 dataKey="label"
-                tick={{ fill: "oklch(0.55 0.06 285)", fontSize: 11 }}
+                tick={{ fill: "oklch(0.45 0.06 285)", fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
               />
               <YAxis
-                tick={{ fill: "oklch(0.55 0.06 285)", fontSize: 11 }}
+                tick={{ fill: "oklch(0.45 0.06 285)", fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
                 unit="h"
               />
               <Tooltip
                 content={<CustomTooltip />}
-                cursor={{ fill: "oklch(0.25 0.04 285 / 0.3)" }}
+                cursor={{ fill: "oklch(0.92 0.04 285 / 0.5)" }}
               />
               <Bar
                 dataKey="hours"

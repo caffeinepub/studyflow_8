@@ -8,6 +8,24 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
+export const Subject = IDL.Record({
+  'id' : IDL.Text,
+  'name' : IDL.Text,
+  'createdAt' : IDL.Int,
+});
+export const Topic = IDL.Record({
+  'id' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'text' : IDL.Text,
+  'completed' : IDL.Bool,
+  'subjectId' : IDL.Text,
+});
+export const UserRole = IDL.Variant({
+  'admin' : IDL.Null,
+  'user' : IDL.Null,
+  'guest' : IDL.Null,
+});
+export const UserProfile = IDL.Record({ 'name' : IDL.Text });
 export const StudySession = IDL.Record({
   'date' : IDL.Text,
   'stopCount' : IDL.Nat,
@@ -22,6 +40,8 @@ export const TodoItem = IDL.Record({
 });
 
 export const idlService = IDL.Service({
+  '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'addSubject' : IDL.Func([IDL.Text], [Subject], []),
   'addTodo' : IDL.Func(
       [IDL.Text],
       [
@@ -34,16 +54,51 @@ export const idlService = IDL.Service({
       ],
       [],
     ),
+  'addTopics' : IDL.Func([IDL.Text, IDL.Vec(IDL.Text)], [IDL.Vec(Topic)], []),
+  'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'deleteSubject' : IDL.Func([IDL.Text], [IDL.Bool], []),
   'deleteTodo' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+  'deleteTopic' : IDL.Func([IDL.Text], [IDL.Bool], []),
+  'ensureUser' : IDL.Func([], [], []),
+  'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+  'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getDailySessions' : IDL.Func([], [IDL.Vec(StudySession)], ['query']),
+  'getSubjects' : IDL.Func([], [IDL.Vec(Subject)], ['query']),
   'getTodos' : IDL.Func([], [IDL.Vec(TodoItem)], ['query']),
+  'getTopics' : IDL.Func([], [IDL.Vec(Topic)], ['query']),
+  'getUserProfile' : IDL.Func(
+      [IDL.Principal],
+      [IDL.Opt(UserProfile)],
+      ['query'],
+    ),
+  'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'saveDailySession' : IDL.Func([IDL.Text, IDL.Nat, IDL.Nat, IDL.Nat], [], []),
   'toggleTodo' : IDL.Func([IDL.Nat], [TodoItem], []),
+  'toggleTopic' : IDL.Func([IDL.Text], [Topic], []),
 });
 
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
+  const Subject = IDL.Record({
+    'id' : IDL.Text,
+    'name' : IDL.Text,
+    'createdAt' : IDL.Int,
+  });
+  const Topic = IDL.Record({
+    'id' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'text' : IDL.Text,
+    'completed' : IDL.Bool,
+    'subjectId' : IDL.Text,
+  });
+  const UserRole = IDL.Variant({
+    'admin' : IDL.Null,
+    'user' : IDL.Null,
+    'guest' : IDL.Null,
+  });
+  const UserProfile = IDL.Record({ 'name' : IDL.Text });
   const StudySession = IDL.Record({
     'date' : IDL.Text,
     'stopCount' : IDL.Nat,
@@ -58,6 +113,8 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
+    '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'addSubject' : IDL.Func([IDL.Text], [Subject], []),
     'addTodo' : IDL.Func(
         [IDL.Text],
         [
@@ -70,15 +127,32 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'addTopics' : IDL.Func([IDL.Text, IDL.Vec(IDL.Text)], [IDL.Vec(Topic)], []),
+    'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'deleteSubject' : IDL.Func([IDL.Text], [IDL.Bool], []),
     'deleteTodo' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+    'deleteTopic' : IDL.Func([IDL.Text], [IDL.Bool], []),
+    'ensureUser' : IDL.Func([], [], []),
+    'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+    'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getDailySessions' : IDL.Func([], [IDL.Vec(StudySession)], ['query']),
+    'getSubjects' : IDL.Func([], [IDL.Vec(Subject)], ['query']),
     'getTodos' : IDL.Func([], [IDL.Vec(TodoItem)], ['query']),
+    'getTopics' : IDL.Func([], [IDL.Vec(Topic)], ['query']),
+    'getUserProfile' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Opt(UserProfile)],
+        ['query'],
+      ),
+    'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'saveDailySession' : IDL.Func(
         [IDL.Text, IDL.Nat, IDL.Nat, IDL.Nat],
         [],
         [],
       ),
     'toggleTodo' : IDL.Func([IDL.Nat], [TodoItem], []),
+    'toggleTopic' : IDL.Func([IDL.Text], [Topic], []),
   });
 };
 

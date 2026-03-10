@@ -16,13 +16,31 @@ export interface StudySession {
   'studySeconds' : bigint,
   'breakSeconds' : bigint,
 }
+export interface Subject {
+  'id' : string,
+  'name' : string,
+  'createdAt' : bigint,
+}
 export interface TodoItem {
   'id' : bigint,
   'createdAt' : bigint,
   'text' : string,
   'completed' : boolean,
 }
+export interface Topic {
+  'id' : string,
+  'createdAt' : bigint,
+  'text' : string,
+  'completed' : boolean,
+  'subjectId' : string,
+}
+export interface UserProfile { 'name' : string }
+export type UserRole = { 'admin' : null } |
+  { 'user' : null } |
+  { 'guest' : null };
 export interface _SERVICE {
+  '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'addSubject' : ActorMethod<[string], Subject>,
   'addTodo' : ActorMethod<
     [string],
     {
@@ -32,11 +50,24 @@ export interface _SERVICE {
       'completed' : boolean,
     }
   >,
+  'addTopics' : ActorMethod<[string, Array<string>], Array<Topic>>,
+  'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'deleteSubject' : ActorMethod<[string], boolean>,
   'deleteTodo' : ActorMethod<[bigint], boolean>,
+  'deleteTopic' : ActorMethod<[string], boolean>,
+  'ensureUser' : ActorMethod<[], undefined>,
+  'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
+  'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getDailySessions' : ActorMethod<[], Array<StudySession>>,
+  'getSubjects' : ActorMethod<[], Array<Subject>>,
   'getTodos' : ActorMethod<[], Array<TodoItem>>,
+  'getTopics' : ActorMethod<[], Array<Topic>>,
+  'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
+  'isCallerAdmin' : ActorMethod<[], boolean>,
+  'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'saveDailySession' : ActorMethod<[string, bigint, bigint, bigint], undefined>,
   'toggleTodo' : ActorMethod<[bigint], TodoItem>,
+  'toggleTopic' : ActorMethod<[string], Topic>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

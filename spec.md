@@ -1,40 +1,27 @@
-# StudyFlow - Study Tracker & Productivity App
+# StudyFlow
 
 ## Current State
-New project. No existing code.
+- Planner (subjects/topics) uses localStorage keyed by principal — does not survive if browser storage is cleared; not truly server-side
+- TimerTab has no alarm when break exceeds 15 minutes
+- TasksTab shows task list but has no summary stats
 
 ## Requested Changes (Diff)
 
 ### Add
-- Stopwatch with Start / Pause / Stop / Reset controls
-- Daily session tracking: total study duration, total break time, number of stops (pauses)
-- To-do list: add tasks, mark complete (strikethrough), delete tasks
-- Daily motivational quote displayed prominently (rotates each day from a curated list)
-- Analytics dashboard: bar/line charts for study duration broken down by Day, Week, Month
-- All data persisted in the backend (sessions, to-do items)
+- Backend: Subject and Topic types + CRUD functions stored per-user in the canister
+- Frontend: new hooks for planner backend queries
+- TimerTab: break-exceed-15min alarm with toast + audio beep
+- TasksTab: stats panel showing total/completed/pending/completion rate
 
 ### Modify
-N/A
+- useSubjectPlanner.ts: rewrite to use backend queries instead of localStorage
 
 ### Remove
-N/A
+- localStorage-based planner persistence
 
 ## Implementation Plan
-
-### Backend (Motoko)
-- `StudySession` record: date (Text), studySeconds (Nat), breakSeconds (Nat), stopCount (Nat)
-- `TodoItem` record: id (Nat), text (Text), completed (Bool), createdAt (Int)
-- `saveDailySession(date, studySeconds, breakSeconds, stopCount)` - upsert daily session
-- `getDailySessions()` - return all sessions sorted by date
-- `addTodo(text)` - add new to-do item
-- `toggleTodo(id)` - toggle completed flag
-- `deleteTodo(id)` - remove to-do item
-- `getTodos()` - return all to-do items
-
-### Frontend
-- Layout: sidebar nav with tabs: Timer | Tasks | Reports
-- Timer page: large stopwatch display, mode indicator (Studying / Break), action buttons, today's stats (study time, break time, stops)
-- Tasks page: input to add task, list of tasks with checkbox (strikethrough on complete), delete button
-- Reports page: toggle between Daily / Weekly / Monthly view, bar chart of study hours using recharts
-- Motivational quote banner at the top of every page, changes daily based on date hash from a curated list of 30+ quotes
-- Vibrant color scheme with gradients, bold typography, animated elements
+1. Add Subject/Topic backend functions to main.mo
+2. Add planner query hooks to useQueries.ts
+3. Rewrite useSubjectPlanner.ts to use React Query + backend
+4. Add break alarm logic to TimerTab
+5. Add task stats panel to TasksTab

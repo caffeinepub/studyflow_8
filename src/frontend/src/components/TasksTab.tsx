@@ -45,9 +45,126 @@ export default function TasksTab() {
 
   const pending = todos.filter((t) => !t.completed);
   const completed = todos.filter((t) => t.completed);
+  const completionPct =
+    todos.length > 0 ? Math.round((completed.length / todos.length) * 100) : 0;
 
   return (
     <div className="flex flex-col gap-6 py-6 px-4 max-w-2xl mx-auto w-full">
+      {/* Task Stats Card */}
+      {todos.length > 0 && (
+        <motion.div
+          data-ocid="todo.stats.card"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card rounded-2xl p-4"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Task Progress
+            </h3>
+            <span
+              className="text-sm font-bold"
+              style={{
+                background:
+                  completionPct === 100
+                    ? "linear-gradient(135deg, oklch(0.55 0.22 155), oklch(0.58 0.2 180))"
+                    : "linear-gradient(135deg, oklch(0.5 0.28 295), oklch(0.52 0.26 345))",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+              }}
+            >
+              {completionPct}%
+            </span>
+          </div>
+
+          {/* Progress bar */}
+          <div
+            className="h-2.5 rounded-full overflow-hidden mb-4"
+            style={{ background: "oklch(0.92 0.03 285)" }}
+          >
+            <motion.div
+              className="h-full rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${completionPct}%` }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              style={{
+                background:
+                  completionPct === 100
+                    ? "linear-gradient(90deg, oklch(0.55 0.22 155), oklch(0.7 0.2 155))"
+                    : "linear-gradient(90deg, oklch(0.65 0.28 295), oklch(0.62 0.28 345))",
+              }}
+            />
+          </div>
+
+          {/* Stats row */}
+          <div className="grid grid-cols-3 gap-2">
+            <div
+              className="rounded-xl px-3 py-2 text-center"
+              style={{ background: "oklch(0.96 0.02 285)" }}
+            >
+              <div
+                className="text-lg font-bold font-mono"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.45 0.2 285), oklch(0.5 0.18 295))",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                {todos.length}
+              </div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">
+                Total
+              </div>
+            </div>
+
+            <div
+              className="rounded-xl px-3 py-2 text-center"
+              style={{ background: "oklch(0.96 0.02 285)" }}
+            >
+              <div
+                className="text-lg font-bold font-mono"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.55 0.22 155), oklch(0.58 0.2 180))",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                {completed.length}
+              </div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">
+                Done
+              </div>
+            </div>
+
+            <div
+              className="rounded-xl px-3 py-2 text-center"
+              style={{ background: "oklch(0.96 0.02 285)" }}
+            >
+              <div
+                className="text-lg font-bold font-mono"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.52 0.26 345), oklch(0.52 0.24 25))",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                {pending.length}
+              </div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">
+                Pending
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Add task */}
       <div className="glass-card rounded-2xl p-4">
         <div className="flex gap-3">
@@ -57,7 +174,8 @@ export default function TasksTab() {
             onChange={(e) => setNewTask(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Add a new task..."
-            className="flex-1 bg-transparent border-border/50 focus:border-primary/60 text-foreground placeholder:text-muted-foreground"
+            className="flex-1 border-border focus:border-primary/60 text-foreground placeholder:text-muted-foreground"
+            style={{ background: "oklch(0.98 0.01 285)" }}
           />
           <Button
             data-ocid="todo.add_button"
