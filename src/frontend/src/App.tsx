@@ -34,12 +34,7 @@ const TABS: { key: Tab; label: string; icon: typeof Timer; ocid: string }[] = [
     icon: BarChart3,
     ocid: "nav.reports.tab",
   },
-  {
-    key: "planner",
-    label: "Planner",
-    icon: BookOpen,
-    ocid: "nav.planner.tab",
-  },
+  { key: "planner", label: "Planner", icon: BookOpen, ocid: "nav.planner.tab" },
 ];
 
 const TAB_COMPONENTS: Record<Tab, React.ComponentType> = {
@@ -72,22 +67,22 @@ function AppContent() {
           "linear-gradient(135deg, oklch(0.97 0.015 285) 0%, oklch(0.98 0.01 240) 50%, oklch(0.97 0.015 340) 100%)",
       }}
     >
-      {/* Ambient background blobs */}
+      {/* Ambient background blobs - static, no animation */}
       <div
         aria-hidden
         className="fixed inset-0 pointer-events-none overflow-hidden"
         style={{ zIndex: 0 }}
       >
         <div
-          className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-15 blur-3xl"
+          className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-15 blur-xl"
           style={{ background: "oklch(0.65 0.28 295)" }}
         />
         <div
-          className="absolute top-1/2 -right-32 w-80 h-80 rounded-full opacity-12 blur-3xl"
+          className="absolute top-1/2 -right-32 w-80 h-80 rounded-full opacity-12 blur-xl"
           style={{ background: "oklch(0.62 0.28 345)" }}
         />
         <div
-          className="absolute -bottom-20 left-1/3 w-72 h-72 rounded-full opacity-10 blur-3xl"
+          className="absolute -bottom-20 left-1/3 w-72 h-72 rounded-full opacity-10 blur-xl"
           style={{ background: "oklch(0.65 0.24 210)" }}
         />
       </div>
@@ -97,13 +92,7 @@ function AppContent() {
         <header className="pt-6 pb-2 px-4 md:px-8">
           <div className="max-w-4xl mx-auto">
             {/* App title + user section */}
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="flex items-center justify-between gap-3 mb-5"
-            >
-              {/* Logo */}
+            <div className="flex items-center justify-between gap-3 mb-5">
               <div className="flex items-center gap-3">
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md"
@@ -133,9 +122,7 @@ function AppContent() {
                 </div>
               </div>
 
-              {/* User section */}
               <div className="flex items-center gap-2">
-                {/* User identity badge */}
                 <div
                   className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl"
                   style={{
@@ -162,8 +149,6 @@ function AppContent() {
                     {shortPrincipal}
                   </span>
                 </div>
-
-                {/* Sign out button */}
                 <Button
                   data-ocid="header.signout.button"
                   variant="ghost"
@@ -180,22 +165,12 @@ function AppContent() {
                   <span className="hidden sm:inline">Sign Out</span>
                 </Button>
               </div>
-            </motion.div>
+            </div>
 
-            {/* Countdown Banner — above daily quote */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15, duration: 0.5 }}
-            >
-              <CountdownBanner />
-            </motion.div>
+            <CountdownBanner />
 
             {/* Daily quote banner */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25, duration: 0.5 }}
+            <div
               className="relative overflow-hidden rounded-2xl mb-5 p-4 md:p-5"
               style={{
                 background: "oklch(1 0 0 / 0.9)",
@@ -203,7 +178,6 @@ function AppContent() {
                 boxShadow: "0 2px 16px oklch(0.58 0.26 345 / 0.06)",
               }}
             >
-              {/* Colorful left border accent */}
               <div
                 className="absolute top-0 left-0 bottom-0 w-1 rounded-l-2xl"
                 style={{
@@ -237,7 +211,7 @@ function AppContent() {
                   </p>
                 </div>
               </div>
-            </motion.div>
+            </div>
 
             {/* Tab nav */}
             <nav
@@ -253,7 +227,7 @@ function AppContent() {
                   key={key}
                   data-ocid={ocid}
                   onClick={() => setActiveTab(key)}
-                  className="relative flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-colors duration-200"
+                  className="relative flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-colors duration-150"
                   style={
                     activeTab === key
                       ? { color: "white" }
@@ -270,8 +244,8 @@ function AppContent() {
                       }}
                       transition={{
                         type: "spring",
-                        bounce: 0.2,
-                        duration: 0.4,
+                        bounce: 0.15,
+                        duration: 0.25,
                       }}
                     />
                   )}
@@ -289,10 +263,8 @@ function AppContent() {
         <main className="flex-1 px-4 md:px-8 pb-6">
           <div className="max-w-4xl mx-auto">
             {!isReady ? (
-              <motion.div
+              <div
                 data-ocid="app.loading_state"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
                 className="flex flex-col items-center justify-center py-24 gap-4"
               >
                 <Loader2
@@ -305,15 +277,15 @@ function AppContent() {
                 >
                   Setting up your account...
                 </p>
-              </motion.div>
+              </div>
             ) : (
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeTab}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  transition={{ duration: 0.25, ease: "easeInOut" }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.1 }}
                 >
                   <ActiveComponent />
                 </motion.div>
@@ -322,7 +294,6 @@ function AppContent() {
           </div>
         </main>
 
-        {/* Footer */}
         <footer className="py-4 text-center text-xs text-muted-foreground px-4">
           <span>© {new Date().getFullYear()}. Built with </span>
           <span style={{ color: "oklch(0.58 0.26 345)" }}>♥</span>
@@ -356,7 +327,6 @@ export default function App() {
   const { identity, login, isInitializing, isLoggingIn } =
     useInternetIdentity();
 
-  // Show login screen if not authenticated
   if (isInitializing || !identity) {
     return (
       <>

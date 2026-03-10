@@ -1,26 +1,44 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useActor } from "./useActor";
 import { useInternetIdentity } from "./useInternetIdentity";
 
+// Module-level promise so any mutation can await registration completion
+let ensureUserResolve: (() => void) | null = null;
+let ensureUserPromise: Promise<void> = new Promise((resolve) => {
+  ensureUserResolve = resolve;
+});
+
+export function getEnsureUserPromise(): Promise<void> {
+  return ensureUserPromise;
+}
+
 export function useUserSetup(): { isReady: boolean } {
-  const { actor, isFetching } = useActor();
+  const { actor } = useActor();
   const { identity } = useInternetIdentity();
-  const [isReady, setIsReady] = useState(false);
+  const setupStarted = useRef(false);
 
   useEffect(() => {
-    if (!identity || !actor || isFetching) {
-      setIsReady(false);
-      return;
-    }
+    if (!identity || !actor) return;
+    if (setupStarted.current) return;
+    setupStarted.current = true;
 
-    // Show the UI immediately — optimistic
-    setIsReady(true);
-
-    // Register in the background without blocking the UI
-    void actor.ensureUser().catch((err: unknown) => {
-      console.error("ensureUser failed:", err);
+    // Reset promise for this login session
+    ensureUserPromise = new Promise((resolve) => {
+      ensureUserResolve = resolve;
     });
-  }, [actor, identity, isFetching]);
 
-  return { isReady };
+    actor
+      .ensureUser()
+      .then(() => {
+        ensureUserResolve?.();
+      })
+      .catch((err: unknown) => {
+        console.error("ensureUser failed:", err);
+        // Resolve anyway so mutations don't hang forever
+        ensureUserResolve?.();
+      });
+  }, [actor, identity]);
+
+  // Always show the UI immediately
+  return { isReady: true };
 }

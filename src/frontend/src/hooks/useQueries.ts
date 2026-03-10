@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActor } from "./useActor";
 import { useInternetIdentity } from "./useInternetIdentity";
+import { getEnsureUserPromise } from "./useUserSetup";
 
 // ─── Sessions ──────────────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ export function useSaveDailySession() {
       stopCount: bigint;
     }) => {
       if (!actor) throw new Error("No actor");
+      await getEnsureUserPromise();
       return actor.saveDailySession(
         date,
         studySeconds,
@@ -75,6 +77,7 @@ export function useAddTodo() {
   return useMutation({
     mutationFn: async (text: string) => {
       if (!actor) throw new Error("No actor");
+      await getEnsureUserPromise();
       return actor.addTodo(text);
     },
     onSuccess: () => {
@@ -91,6 +94,7 @@ export function useToggleTodo() {
   return useMutation({
     mutationFn: async (id: bigint) => {
       if (!actor) throw new Error("No actor");
+      await getEnsureUserPromise();
       return actor.toggleTodo(id);
     },
     onMutate: async (id) => {
@@ -128,6 +132,7 @@ export function useDeleteTodo() {
   return useMutation({
     mutationFn: async (id: bigint) => {
       if (!actor) throw new Error("No actor");
+      await getEnsureUserPromise();
       return actor.deleteTodo(id);
     },
     onMutate: async (id) => {
@@ -187,9 +192,31 @@ export function useAddSubject() {
   return useMutation({
     mutationFn: async (name: string) => {
       if (!actor) throw new Error("No actor");
+      await getEnsureUserPromise();
       return actor.addSubject(name);
     },
-    onSuccess: () => {
+    onMutate: async (name) => {
+      await queryClient.cancelQueries({ queryKey: ["subjects", principalKey] });
+      const prev = queryClient.getQueryData(["subjects", principalKey]);
+      const optimisticSubject = {
+        id: `optimistic-${Date.now()}`,
+        name,
+        createdAt: BigInt(Date.now()) * BigInt(1_000_000),
+      };
+      queryClient.setQueryData(
+        ["subjects", principalKey],
+        (old: Array<{ id: string; name: string; createdAt: bigint }> = []) => [
+          ...old,
+          optimisticSubject,
+        ],
+      );
+      return { prev };
+    },
+    onError: (_err, _name, ctx) => {
+      if (ctx?.prev)
+        queryClient.setQueryData(["subjects", principalKey], ctx.prev);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["subjects", principalKey] });
     },
   });
@@ -203,6 +230,7 @@ export function useDeleteSubject() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (!actor) throw new Error("No actor");
+      await getEnsureUserPromise();
       return actor.deleteSubject(id);
     },
     onMutate: async (id) => {
@@ -243,14 +271,53 @@ export function useAddTopics() {
     mutationFn: async ({
       subjectId,
       texts,
+      dueDate,
     }: {
       subjectId: string;
       texts: string[];
+      dueDate?: string;
     }) => {
       if (!actor) throw new Error("No actor");
-      return actor.addTopics(subjectId, texts);
+      await getEnsureUserPromise();
+      const topicInputs = texts.map((text) => ({
+        text,
+        dueDate: dueDate ? [dueDate] : ([] as []),
+      }));
+      // Cast to any because backend.d.ts may not yet reflect the updated addTopics signature
+      return (actor as any).addTopics(subjectId, topicInputs);
     },
-    onSuccess: () => {
+    onMutate: async ({ subjectId, texts, dueDate }) => {
+      await queryClient.cancelQueries({ queryKey: ["topics", principalKey] });
+      const prev = queryClient.getQueryData(["topics", principalKey]);
+      const now = Date.now();
+      const optimisticTopics = texts.map((text, i) => ({
+        id: `optimistic-${now}-${i}`,
+        subjectId,
+        text,
+        completed: false,
+        createdAt: BigInt(now + i) * BigInt(1_000_000),
+        dueDate: dueDate ? [dueDate] : ([] as []),
+      }));
+      queryClient.setQueryData(
+        ["topics", principalKey],
+        (
+          old: Array<{
+            id: string;
+            subjectId: string;
+            text: string;
+            completed: boolean;
+            createdAt: bigint;
+            dueDate: [] | [string];
+          }> = [],
+        ) => [...old, ...optimisticTopics],
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev)
+        queryClient.setQueryData(["topics", principalKey], ctx.prev);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["topics", principalKey] });
     },
   });
@@ -264,6 +331,7 @@ export function useToggleTopic() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (!actor) throw new Error("No actor");
+      await getEnsureUserPromise();
       return actor.toggleTopic(id);
     },
     onMutate: async (id) => {
@@ -294,6 +362,7 @@ export function useDeleteTopic() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (!actor) throw new Error("No actor");
+      await getEnsureUserPromise();
       return actor.deleteTopic(id);
     },
     onMutate: async (id) => {

@@ -14,6 +14,7 @@ export type Topic = {
   text: string;
   completed: boolean;
   createdAt: bigint;
+  dueDate: [] | [string];
 };
 
 export type Subject = {
@@ -24,7 +25,8 @@ export type Subject = {
 
 export function useSubjectPlanner() {
   const { data: subjects = [], isLoading: subjectsLoading } = useGetSubjects();
-  const { data: topics = [], isLoading: topicsLoading } = useGetTopics();
+  const { data: rawTopics = [], isLoading: topicsLoading } = useGetTopics();
+  const topics = rawTopics as Topic[];
 
   const { mutate: addSubjectMutation } = useAddSubject();
   const { mutate: deleteSubjectMutation } = useDeleteSubject();
@@ -42,10 +44,10 @@ export function useSubjectPlanner() {
     deleteSubjectMutation(id);
   };
 
-  const addTopics = (subjectId: string, texts: string[]) => {
+  const addTopics = (subjectId: string, texts: string[], dueDate?: string) => {
     const filtered = texts.map((t) => t.trim()).filter(Boolean);
     if (filtered.length === 0) return;
-    addTopicsMutation({ subjectId, texts: filtered });
+    addTopicsMutation({ subjectId, texts: filtered, dueDate });
   };
 
   const toggleTopic = (id: string) => {
