@@ -1,7 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActor } from "./useActor";
 import { useInternetIdentity } from "./useInternetIdentity";
-import { getEnsureUserPromise } from "./useUserSetup";
+
+// Helper: ensure user is registered before any write operation
+async function ensureAndRun<T>(
+  actor: import("../backend").backendInterface,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await actor.ensureUser();
+  return fn();
+}
 
 // ─── Sessions ──────────────────────────────────────────────────────────────
 
@@ -37,12 +45,8 @@ export function useSaveDailySession() {
       stopCount: bigint;
     }) => {
       if (!actor) throw new Error("No actor");
-      await getEnsureUserPromise();
-      return actor.saveDailySession(
-        date,
-        studySeconds,
-        breakSeconds,
-        stopCount,
+      return ensureAndRun(actor, () =>
+        actor.saveDailySession(date, studySeconds, breakSeconds, stopCount),
       );
     },
     onSuccess: () => {
@@ -77,8 +81,7 @@ export function useAddTodo() {
   return useMutation({
     mutationFn: async (text: string) => {
       if (!actor) throw new Error("No actor");
-      await getEnsureUserPromise();
-      return actor.addTodo(text);
+      return ensureAndRun(actor, () => actor.addTodo(text));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["todos", principalKey] });
@@ -94,8 +97,7 @@ export function useToggleTodo() {
   return useMutation({
     mutationFn: async (id: bigint) => {
       if (!actor) throw new Error("No actor");
-      await getEnsureUserPromise();
-      return actor.toggleTodo(id);
+      return ensureAndRun(actor, () => actor.toggleTodo(id));
     },
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ["todos", principalKey] });
@@ -132,8 +134,7 @@ export function useDeleteTodo() {
   return useMutation({
     mutationFn: async (id: bigint) => {
       if (!actor) throw new Error("No actor");
-      await getEnsureUserPromise();
-      return actor.deleteTodo(id);
+      return ensureAndRun(actor, () => actor.deleteTodo(id));
     },
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ["todos", principalKey] });
@@ -192,8 +193,7 @@ export function useAddSubject() {
   return useMutation({
     mutationFn: async (name: string) => {
       if (!actor) throw new Error("No actor");
-      await getEnsureUserPromise();
-      return actor.addSubject(name);
+      return ensureAndRun(actor, () => actor.addSubject(name));
     },
     onMutate: async (name) => {
       await queryClient.cancelQueries({ queryKey: ["subjects", principalKey] });
@@ -230,8 +230,7 @@ export function useDeleteSubject() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (!actor) throw new Error("No actor");
-      await getEnsureUserPromise();
-      return actor.deleteSubject(id);
+      return ensureAndRun(actor, () => actor.deleteSubject(id));
     },
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ["subjects", principalKey] });
@@ -278,13 +277,13 @@ export function useAddTopics() {
       dueDate?: string;
     }) => {
       if (!actor) throw new Error("No actor");
-      await getEnsureUserPromise();
       const topicInputs = texts.map((text) => ({
         text,
-        dueDate: dueDate ? [dueDate] : ([] as []),
+        dueDate: dueDate ? ([dueDate] as [string]) : ([] as []),
       }));
-      // Cast to any because backend.d.ts may not yet reflect the updated addTopics signature
-      return (actor as any).addTopics(subjectId, topicInputs);
+      return ensureAndRun(actor, () =>
+        (actor as any).addTopics(subjectId, topicInputs),
+      );
     },
     onMutate: async ({ subjectId, texts, dueDate }) => {
       await queryClient.cancelQueries({ queryKey: ["topics", principalKey] });
@@ -296,7 +295,7 @@ export function useAddTopics() {
         text,
         completed: false,
         createdAt: BigInt(now + i) * BigInt(1_000_000),
-        dueDate: dueDate ? [dueDate] : ([] as []),
+        dueDate: dueDate ? ([dueDate] as [string]) : ([] as []),
       }));
       queryClient.setQueryData(
         ["topics", principalKey],
@@ -331,8 +330,7 @@ export function useToggleTopic() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (!actor) throw new Error("No actor");
-      await getEnsureUserPromise();
-      return actor.toggleTopic(id);
+      return ensureAndRun(actor, () => actor.toggleTopic(id));
     },
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ["topics", principalKey] });
@@ -362,8 +360,7 @@ export function useDeleteTopic() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (!actor) throw new Error("No actor");
-      await getEnsureUserPromise();
-      return actor.deleteTopic(id);
+      return ensureAndRun(actor, () => actor.deleteTopic(id));
     },
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ["topics", principalKey] });

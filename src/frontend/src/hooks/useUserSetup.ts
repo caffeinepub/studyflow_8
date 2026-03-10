@@ -2,16 +2,6 @@ import { useEffect, useRef } from "react";
 import { useActor } from "./useActor";
 import { useInternetIdentity } from "./useInternetIdentity";
 
-// Module-level promise so any mutation can await registration completion
-let ensureUserResolve: (() => void) | null = null;
-let ensureUserPromise: Promise<void> = new Promise((resolve) => {
-  ensureUserResolve = resolve;
-});
-
-export function getEnsureUserPromise(): Promise<void> {
-  return ensureUserPromise;
-}
-
 export function useUserSetup(): { isReady: boolean } {
   const { actor } = useActor();
   const { identity } = useInternetIdentity();
@@ -22,23 +12,12 @@ export function useUserSetup(): { isReady: boolean } {
     if (setupStarted.current) return;
     setupStarted.current = true;
 
-    // Reset promise for this login session
-    ensureUserPromise = new Promise((resolve) => {
-      ensureUserResolve = resolve;
+    // Best-effort background registration — mutations call ensureUser() themselves
+    actor.ensureUser().catch((err: unknown) => {
+      console.warn("Background ensureUser failed:", err);
     });
-
-    actor
-      .ensureUser()
-      .then(() => {
-        ensureUserResolve?.();
-      })
-      .catch((err: unknown) => {
-        console.error("ensureUser failed:", err);
-        // Resolve anyway so mutations don't hang forever
-        ensureUserResolve?.();
-      });
   }, [actor, identity]);
 
-  // Always show the UI immediately
+  // Always show UI immediately
   return { isReady: true };
 }
